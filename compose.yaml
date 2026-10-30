@@ -1,0 +1,61 @@
+name: blackout-lab
+x-service: &service
+  build: .
+  init: true
+  restart: unless-stopped
+  networks: [lab]
+  healthcheck:
+    test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+    interval: 5s
+    timeout: 3s
+    retries: 15
+    start_period: 10s
+services:
+  control:
+    <<: *service
+    ports: ["127.0.0.1:8080:8080"]
+    environment:
+      BLACKOUT_ROLE: control
+      ORDERS_URL: http://orders:8080
+      PAYMENTS_URL: http://payments:8080
+      INVENTORY_URL: http://inventory:8080
+      BLACKOUT_MODEL: ${BLACKOUT_MODEL:-gemma4:e4b}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes: ["control-data:/data"]
+    depends_on:
+      orders: {condition: service_healthy}
+      payments: {condition: service_healthy}
+      inventory: {condition: service_healthy}
+  orders:
+    <<: *service
+    environment:
+      BLACKOUT_ROLE: orders
+      ORDERS_URL: http://orders:8080
+      PAYMENTS_URL: http://payments:8080
+      INVENTORY_URL: http://inventory:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes: ["orders-data:/data"]
+    depends_on:
+      payments: {condition: service_healthy}
+      inventory: {condition: service_healthy}
+  payments:
+    <<: *service
+    environment:
+      BLACKOUT_ROLE: payments
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes: ["payments-data:/data"]
+  inventory:
+    <<: *service
+    environment:
+      BLACKOUT_ROLE: inventory
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes: ["inventory-data:/data"]
+networks:
+  lab:
+volumes:
+  control-data:
+  orders-data:
+  payments-data:
+  inventory-data:

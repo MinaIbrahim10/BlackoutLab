@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env
+data/
+*.sqlite*
+*.egg-info/
+build/
+dist/
+benchmark.json
+*-benchmark.json

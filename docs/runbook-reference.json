@@ -1,0 +1,117 @@
+{
+  "mode": "runbook",
+  "model": null,
+  "trials_per_scenario": 3,
+  "results": [
+    {
+      "scenario": "orphaned-payment",
+      "trial": 1,
+      "status": "recovered",
+      "duration_ms": 129.19,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    },
+    {
+      "scenario": "orphaned-payment",
+      "trial": 2,
+      "status": "recovered",
+      "duration_ms": 186.36,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    },
+    {
+      "scenario": "orphaned-payment",
+      "trial": 3,
+      "status": "recovered",
+      "duration_ms": 111.45,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    },
+    {
+      "scenario": "duplicate-reservation",
+      "trial": 1,
+      "status": "recovered",
+      "duration_ms": 131.05,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    },
+    {
+      "scenario": "duplicate-reservation",
+      "trial": 2,
+      "status": "recovered",
+      "duration_ms": 101.78,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    },
+    {
+      "scenario": "duplicate-reservation",
+      "trial": 3,
+      "status": "recovered",
+      "duration_ms": 112.41,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    },
+    {
+      "scenario": "payments-outage",
+      "trial": 1,
+      "status": "recovered",
+      "duration_ms": 117.42,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    },
+    {
+      "scenario": "payments-outage",
+      "trial": 2,
+      "status": "recovered",
+      "duration_ms": 138.49,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    },
+    {
+      "scenario": "payments-outage",
+      "trial": 3,
+      "status": "recovered",
+      "duration_ms": 110.67,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    }
+  ],
+  "recovery_rate": 1.0,
+  "note": "Runbook is a deterministic reference, not an AI performance measurement. Compare single/multi using the same model and trials."
+}
