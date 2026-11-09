@@ -1,6 +1,7 @@
 """Incident lifecycle, evidence collection, allowlisted recovery and truthful reports."""
 import json
 import time
+import httpx
 from .agents import ACTIONS
 from .services import DomainError, UNIT_PRICE
 from .verify import snapshot, verify
@@ -96,7 +97,7 @@ class Lab:
                     failed.append(item)
             return {'observed_operation_failures':failed[:12], **clean}
         def ask(role, context):
-            # One correction attempt for malformed/invalid structured output only.
+            # One correction/retry for invalid output or a transient model-server 5xx.
             # Every request, including the failed one, remains in the report.
             for attempt in range(1, 3):
                 at = time.perf_counter()
@@ -109,10 +110,12 @@ class Lab:
                     self.emit(run,'agent.completed',calls[-1],role)
                     return answer
                 except Exception as exc:
-                    retry = attempt == 1 and isinstance(exc, (ValueError, KeyError))
+                    server_status = exc.response.status_code if isinstance(exc,httpx.HTTPStatusError) else None
+                    retry = attempt == 1 and (isinstance(exc,(ValueError,KeyError)) or
+                                              (server_status is not None and server_status >= 500))
                     item = {'role':role,'status':'failed','error':type(exc).__name__,
-                            'attempt':attempt,'will_retry':retry,
-                            'summary':'Structured response rejected; requesting one correction.' if retry else
+                            'attempt':attempt,'will_retry':retry,'http_status':server_status,
+                            'summary':'Model response failed; requesting one bounded correction or retry.' if retry else
                                       'Agent inference failed. See Ollama configuration and server availability.',
                             'duration_ms':round((time.perf_counter()-at)*1000,2)}
                     calls.append(item)
@@ -120,9 +123,12 @@ class Lab:
                     if not retry:
                         failures.append(item)
                         return None
-                    context = {**context, 'response_validation_feedback':{
-                        'error_type':type(exc).__name__,
-                        'required':'A concise schema-valid answer. Recovery planners must cite evidence and select 1–5 executable allowlisted actions.'}}
+                    if server_status is not None:
+                        context = {**context,'model_server_retry_feedback':{'http_status':server_status}}
+                    else:
+                        context = {**context, 'response_validation_feedback':{
+                            'error_type':type(exc).__name__,
+                            'required':'A concise schema-valid answer. Recovery planners must cite evidence and select 1–5 executable allowlisted actions.'}}
             return None
         hearing = []
         if mode == 'runbook':

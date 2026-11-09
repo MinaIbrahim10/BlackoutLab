@@ -1,5 +1,6 @@
 """Typed, bounded Gemma agents. Actions are identifiers, never executable code."""
 import os
+from threading import Lock
 import httpx
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Literal
@@ -51,8 +52,14 @@ class OllamaAgents:
     def __init__(self, model=None, base_url=None):
         self.model = model or os.getenv('BLACKOUT_MODEL','gemma4:e4b')
         self.url = (base_url or os.getenv('OLLAMA_BASE_URL','http://127.0.0.1:11434')).rstrip('/')
+        self._request_lock = Lock()
 
     def ask(self, role, context):
+        # Concurrent incidents share one local model endpoint and its GPU budget.
+        with self._request_lock:
+            return self._ask(role, context)
+
+    def _ask(self, role, context):
         schema = AgentAnswer.model_json_schema()
         if role not in ('recovery', 'single'):
             schema['properties']['actions']['maxItems'] = 0

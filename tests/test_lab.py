@@ -372,3 +372,78 @@ def test_invalid_response_correction_budget_stops_without_fallback(system):
     assert report['metrics']['agent_failures']==2
     assert report['metrics']['response_retries']==1
     assert report['agents'][-1]['will_retry'] is False
+
+
+@pytest.mark.parametrize('status,expected_requests',[(503,2),(400,1)])
+def test_only_transient_server_errors_receive_bounded_retry(system,status,expected_requests):
+    store,transport,lab=system
+    class ServerFailure:
+        calls=0
+        def ask(self,role,context):
+            self.calls+=1
+            if self.calls==1:
+                response=httpx.Response(status,request=httpx.Request('POST','http://127.0.0.1:11434/api/chat'))
+                response.raise_for_status()
+            assert context['model_server_retry_feedback']['http_status']==503
+            return {'summary':'Repair','actions':['restore-payments','replay-checkouts']}
+    agent=ServerFailure();lab.agents=agent
+    rid=store.create_run('payments-outage','single')
+    report=lab.run(rid,'payments-outage','single')
+    assert agent.calls==expected_requests
+    assert report['agents'][0]['http_status']==status
+    assert report['status']==('recovered' if status==503 else 'unresolved')
+    assert report['metrics']['agent_failures']==1
+
+
+def test_shared_ollama_client_serializes_concurrent_incidents(monkeypatch):
+    from threading import Lock
+    active=peak=0
+    guard=Lock()
+    class Response:
+        def raise_for_status(self):pass
+        def json(self):return {'message':{'content':json.dumps({'summary':'Repair','evidence':['observed error'],'actions':['restore-payments']})}}
+    class Client:
+        def __init__(self,**kwargs):pass
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def post(self,*args,**kwargs):
+            nonlocal active,peak
+            with guard:
+                active+=1;peak=max(peak,active)
+            time.sleep(.03)
+            with guard:active-=1
+            return Response()
+    monkeypatch.setattr('blackout.agents.httpx.Client',Client)
+    agent=OllamaAgents(model='test-only')
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        answers=list(pool.map(lambda _:agent.ask('single',{}),range(4)))
+    assert len(answers)==4 and peak==1
+
+
+def test_control_queue_serializes_incidents_and_retains_capacity(tmp_path):
+    from threading import Event, Lock
+    started,release=Event(),Event()
+    guard=Lock()
+    class HeldAgent:
+        model='test-only'
+        active=peak=0
+        def ask(self,role,context):
+            with guard:
+                self.active+=1;self.peak=max(self.peak,self.active)
+            started.set()
+            try:
+                assert release.wait(10)
+                return {'summary':'Repair','actions':['restore-orders','replay-checkouts']}
+            finally:
+                with guard:self.active-=1
+    agent=HeldAgent()
+    with TestClient(create_app(tmp_path,agents=agent)) as client:
+        try:
+            first=client.post('/api/runs',json={'scenario':'orphaned-payment','mode':'single'})
+            assert first.status_code==202 and started.wait(3)
+            queued=[client.post('/api/runs',json={'scenario':'orphaned-payment','mode':'single'}) for _ in range(3)]
+            assert all(r.status_code==202 for r in queued)
+            assert client.post('/api/runs',json={'scenario':'orphaned-payment','mode':'single'}).status_code==429
+            assert agent.peak==1
+        finally:release.set()
+    assert agent.peak==1
