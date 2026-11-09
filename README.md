@@ -6,6 +6,22 @@ A local-first incident-response laboratory for a tiny commerce system, with repr
 
 > This is an authored toy-service laboratory. All payments are fake. Recovery results apply to these scenarios; this is not a production SRE agent.
 
+## Google Colab and UI integration tests
+
+[Open the combined Colab notebook](https://colab.research.google.com/github/MinaIbrahim10/BlackoutLab/blob/fix/ollama-colab-validation/notebooks/Colab.ipynb). Select a T4 GPU and run the cells in order. The notebook installs official Ollama, supplies the required `zstd` dependency, warms Gemma before experiments, runs both laboratories, and offers authenticated Colab dashboard links. BlackoutLab uses port 8081 because Colab occupies 8080. Download the JSON evidence before the runtime expires.
+
+Agent requests explicitly disable optional thinking so the bounded generation budget is available for the structured answer. This improves transport/JSON reliability, not factual or planning accuracy. Measured results and limitations are in [the November validation record](docs/VALIDATION_2026-11-09.md).
+
+The frontend has a DOM integration smoke test against a real Python server. It checks application behavior but does not render pixels or replace visual browser QA:
+
+```bash
+python -m pip install .
+npm install --no-audit --no-fund --prefix /tmp/lab-ui jsdom@31.0.0
+NODE_PATH=/tmp/lab-ui/node_modules node tests/ui_smoke.cjs
+```
+
+Use Node 24. The `DOM integration` GitHub Actions workflow runs this test independently of the Python suite.
+
 ## Quick start
 
 ```bash

@@ -1,0 +1,45 @@
+{
+  "mode": "runbook",
+  "model": null,
+  "trials_per_scenario": 1,
+  "results": [
+    {
+      "scenario": "orphaned-payment",
+      "trial": 1,
+      "status": "recovered",
+      "duration_ms": 736.83,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    },
+    {
+      "scenario": "duplicate-reservation",
+      "trial": 1,
+      "status": "recovered",
+      "duration_ms": 696.23,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    },
+    {
+      "scenario": "payments-outage",
+      "trial": 1,
+      "status": "recovered",
+      "duration_ms": 625.75,
+      "agent_calls": 0,
+      "agent_failures": 0,
+      "actions_attempted": 2,
+      "actions_failed": 0,
+      "checks_passed": 6,
+      "checks_total": 6
+    }
+  ],
+  "recovery_rate": 1.0,
+  "note": "Runbook is a deterministic reference, not an AI performance measurement. Compare single/multi using the same model and trials."
+}

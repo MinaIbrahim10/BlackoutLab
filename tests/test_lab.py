@@ -168,6 +168,9 @@ def test_ollama_adapter_checks_response_and_analysis_role_permissions(monkeypatc
     assert agent.ask('recovery',{})['actions']==['restore-orders']
     assert payloads[0]['format']['properties']['actions']['items']['enum']
     assert payloads[0]['stream'] is False
+    assert payloads[0]['think'] is False
+    assert payloads[0]['format']['properties']['actions']['maxItems'] == 0
+    assert payloads[1]['format']['properties']['actions']['maxItems'] == 5
 
 
 def test_corrupted_payment_quantity_fails_verifier(system):
