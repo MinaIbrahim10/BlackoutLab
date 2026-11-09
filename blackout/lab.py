@@ -19,8 +19,11 @@ SCENARIOS = {
 
 
 class Lab:
-    def __init__(self, store, transport, agents=None):
+    def __init__(self, store, transport, agents=None, max_rounds=3):
+        if type(max_rounds) is not int or not 1 <= max_rounds <= 3:
+            raise ValueError('Recovery rounds must be between 1 and 3')
         self.store, self.transport, self.agents = store, transport, agents
+        self.max_rounds = max_rounds
 
     def emit(self, run, kind, data, role='control'):
         self.store.log(run,role,kind,data)
@@ -73,6 +76,7 @@ class Lab:
         calls = []
         failures = []
         actions = []
+        rounds = []
         # Hide the scenario/runbook and injected fault configuration from the agent inputs.
         # Logs still expose authored failure messages: this is an introductory benchmark.
         def evidence(context):
@@ -96,13 +100,13 @@ class Lab:
                 calls.append(item);failures.append(item)
                 self.emit(run,'agent.failed',item,role)
                 return None
+        hearing = []
         if mode == 'runbook':
             plan = SCENARIOS[scenario]['runbook']
             self.emit(run,'runbook.selected',{'actions':plan,'note':'Deterministic reference baseline; no AI calls.'},'commander')
         else:
             context = evidence(before)
             if mode == 'multi':
-                hearing = []
                 for role in ('commander','observer','investigator'):
                     answer = ask(role,{**context,'hearing':hearing})
                     if answer is None: break
@@ -111,27 +115,47 @@ class Lab:
             else:
                 proposed = ask('single',context)
             plan = proposed.get('actions',[]) if proposed else []
-        self.store.update_run(run,'recovering')
-        for action in plan:
-            try:
-                self.emit(run,'action.started',{'action':action},'recovery')
-                result = self.apply(run,action)
-                actions.append({'action':action,'status':'completed','result':result})
-            except Exception as exc:
-                actions.append({'action':action,'status':'failed','error':str(exc)})
-                self.emit(run,'action.failed',actions[-1],'recovery')
-        self.store.update_run(run,'verifying')
-        after = self.collect(run)
-        self.emit(run,'verification.after',after['verification'],'verifier')
+        budget = 1 if mode == 'runbook' else self.max_rounds
+        for round_number in range(1, budget + 1):
+            self.store.update_run(run,'recovering')
+            self.emit(run,'recovery.round',{'round':round_number,'budget':budget,'actions':plan},'recovery')
+            round_actions = []
+            for action in plan:
+                try:
+                    self.emit(run,'action.started',{'action':action,'round':round_number},'recovery')
+                    result = self.apply(run,action)
+                    item = {'action':action,'status':'completed','result':result}
+                except Exception as exc:
+                    item = {'action':action,'status':'failed','error':str(exc)}
+                    self.emit(run,'action.failed',item,'recovery')
+                actions.append(item)
+                round_actions.append(item)
+            self.store.update_run(run,'verifying')
+            after = self.collect(run)
+            self.emit(run,'verification.after',after['verification'],'verifier')
+            rounds.append({'round':round_number,'plan':list(plan),'actions':round_actions,
+                           'verification':after['verification']})
+            if after['verification']['healthy'] or failures or round_number == budget:
+                break
+            # The model receives measured feedback, never the scenario's reference plan.
+            feedback = evidence({**after,'previous_attempts':rounds,
+                                 'remaining_rounds':budget-round_number})
+            if mode == 'multi': feedback['hearing'] = hearing
+            self.store.update_run(run,'investigating')
+            proposed = ask('recovery' if mode == 'multi' else 'single',feedback)
+            if proposed is None:
+                break
+            plan = proposed.get('actions',[])
         if mode == 'multi' and not failures:
             ask('verifier',{'verification':after['verification'],'actions':actions})
         healthy = after['verification']['healthy']
         status = 'recovered' if healthy else 'unresolved'
         report = {'run_id':run,'scenario':scenario,'mode':mode,'status':status,
                   'model':getattr(self.agents,'model',None) if mode!='runbook' else None,
-                  'before':before,'after':after,'agents':calls,'actions':actions,
+                  'before':before,'after':after,'agents':calls,'actions':actions,'recovery_rounds':rounds,
                   'metrics':{'duration_ms':round((time.perf_counter()-started)*1000,2),
                              'agent_calls':len(calls),'agent_failures':len(failures),
+                             'recovery_rounds':len(rounds),'max_recovery_rounds':budget,
                              'actions_attempted':len(actions),'actions_failed':sum(a['status']=='failed' for a in actions),
                              'checks_passed':sum(c['passed'] for c in after['verification']['checks']),
                              'checks_total':len(after['verification']['checks'])},

@@ -147,6 +147,81 @@ def test_empty_ai_plan_cannot_self_declare_recovery(system):
     assert not report['after']['verification']['healthy']
 
 
+@pytest.mark.parametrize('mode',['single','multi'])
+def test_measured_feedback_repairs_incomplete_plan_without_reference_fallback(system,mode):
+    store,transport,lab=system
+    class FeedbackAgent:
+        model='test-only'
+        def __init__(self): self.plans=[]
+        def ask(self,role,context):
+            actions=[]
+            if role in ('single','recovery'):
+                self.plans.append(context)
+                actions=['restore-orders'] if len(self.plans)==1 else ['replay-checkouts']
+            return {'summary':'Measured feedback response','actions':actions}
+    agent=FeedbackAgent();lab.agents=agent
+    run=store.create_run('orphaned-payment',mode)
+    report=lab.run(run,'orphaned-payment',mode)
+    assert report['status']=='recovered'
+    assert len(agent.plans)==2
+    feedback=agent.plans[1]
+    assert feedback['remaining_rounds']==2
+    assert not feedback['verification']['healthy']
+    assert feedback['state']['orders']['orders']==[]
+    assert all('faults' not in service for service in feedback['state'].values())
+    assert 'scenario' not in feedback and 'runbook' not in feedback
+    assert feedback['previous_attempts'][0]['plan']==['restore-orders']
+    assert [r['plan'] for r in report['recovery_rounds']]==[['restore-orders'],['replay-checkouts']]
+    assert report['metrics']['recovery_rounds']==2
+    assert report['after']['verification']['payments']==2
+    assert report['after']['verification']['stock']==17
+    assert [a['action'] for a in report['actions']]==['restore-orders','replay-checkouts']
+
+
+def test_repeated_wrong_plans_stop_at_budget_without_fallback(system):
+    store,transport,lab=system
+    class WrongAgent:
+        model='test-only'
+        def __init__(self):self.calls=0
+        def ask(self,role,context):
+            self.calls+=1
+            return {'summary':'Incorrect plan','actions':[]}
+    agent=WrongAgent();lab.agents=agent
+    run=store.create_run('orphaned-payment','single')
+    report=lab.run(run,'orphaned-payment','single')
+    assert report['status']=='unresolved'
+    assert agent.calls==3
+    assert report['metrics']['recovery_rounds']==3
+    assert report['actions']==[]
+    assert not any(event['kind']=='runbook.selected' for event in store.events(run))
+
+
+def test_feedback_inference_failure_preserves_measured_state_and_stops(system):
+    store,transport,lab=system
+    class FailsOnRetry:
+        model='test-only'
+        def __init__(self):self.calls=0
+        def ask(self,role,context):
+            self.calls+=1
+            if self.calls>1: raise TimeoutError()
+            return {'summary':'Incomplete plan','actions':['restore-orders']}
+    agent=FailsOnRetry();lab.agents=agent
+    run=store.create_run('orphaned-payment','single')
+    report=lab.run(run,'orphaned-payment','single')
+    assert report['status']=='unresolved'
+    assert agent.calls==2
+    assert report['metrics']['agent_failures']==1
+    assert report['metrics']['recovery_rounds']==1
+    assert report['after']['state']['orders']['faults']['drop-order'] is False
+    assert report['after']['verification']['orders']==0
+
+
+def test_invalid_round_budget_is_rejected(system):
+    store,transport,_=system
+    for budget in [0,4,True,'3']:
+        with pytest.raises(ValueError): Lab(store,transport,max_rounds=budget)
+
+
 def test_agent_schema_rejects_shell_commands():
     with pytest.raises(ValidationError):AgentAnswer(summary='bad',actions=['curl evil'])
     with pytest.raises(ValidationError):AgentAnswer(summary='bad',unexpected='field')

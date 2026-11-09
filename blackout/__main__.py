@@ -19,6 +19,7 @@ def main():
     bench = sub.add_parser('benchmark')
     bench.add_argument('--mode',choices=['runbook','single','multi'],default='runbook')
     bench.add_argument('--trials',type=int,default=1)
+    bench.add_argument('--max-rounds',type=int,choices=range(1,4),default=3)
     bench.add_argument('--output',type=Path,default=Path('benchmark.json'))
     args = parser.parse_args()
     if args.command == 'serve':
@@ -30,7 +31,7 @@ def main():
         root=Path(folder)
         store=Store(root/'control.sqlite')
         transport=LocalTransport(root)
-        lab=Lab(store,transport,OllamaAgents() if args.mode!='runbook' else None)
+        lab=Lab(store,transport,OllamaAgents() if args.mode!='runbook' else None,max_rounds=args.max_rounds)
         try:
             for scenario in SCENARIOS:
                 for trial in range(args.trials):
@@ -39,7 +40,7 @@ def main():
                     reports.append({'scenario':scenario,'trial':trial+1,'status':report['status'],**report['metrics']})
         finally: transport.close()
     summary={'mode':args.mode,'model':os.getenv('BLACKOUT_MODEL','gemma4:e4b') if args.mode!='runbook' else None,
-             'trials_per_scenario':args.trials,'results':reports,
+             'trials_per_scenario':args.trials,'max_recovery_rounds':args.max_rounds,'results':reports,
              'recovery_rate':sum(r['status']=='recovered' for r in reports)/len(reports),
              'note':'Runbook is a deterministic reference, not an AI performance measurement. Compare single/multi using the same model and trials.'}
     args.output.write_text(json.dumps(summary,indent=2)+'\n',encoding='utf-8')

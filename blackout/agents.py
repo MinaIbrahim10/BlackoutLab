@@ -14,6 +14,9 @@ PLAN_RULES = (
     'when reservations are duplicated, restore inventory idempotency BEFORE deduplicate-inventory. '
     'Check the evidence to decide which boundary failed. Include every necessary step in execution order. '
     'Do not claim that a restore action alone commits orders or repairs ledger data.'
+    ' If previous_attempts are supplied, those actions actually ran. Use the CURRENT state, '
+    'failed checks and action errors to choose the next plan. Supply missing operations instead '
+    'of repeating an ineffective plan. There is a strict recovery-round budget.'
 )
 
 
