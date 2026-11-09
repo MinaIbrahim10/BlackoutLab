@@ -21,5 +21,9 @@ blackout = "blackout.__main__:main"
 [tool.setuptools.package-data]
 blackout = ["static/*.html", "static/*.css", "static/*.js"]
 
+[tool.setuptools.packages.find]
+include = ["blackout", "blackout.*"]
+namespaces = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

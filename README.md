@@ -6,6 +6,22 @@ A local-first incident-response laboratory for a tiny commerce system, with repr
 
 > This is an authored toy-service laboratory. All payments are fake. Recovery results apply to these scenarios; this is not a production SRE agent.
 
+## Google Colab and UI integration tests
+
+[Open the combined Colab notebook](https://colab.research.google.com/github/MinaIbrahim10/BlackoutLab/blob/main/notebooks/Colab.ipynb). Select a T4 GPU and run the cells in order. The notebook installs official Ollama, supplies the required `zstd` dependency, warms Gemma before experiments, runs both laboratories, and renders both real dashboards inside the notebook. BlackoutLab uses port 8081 because Colab occupies 8080. Download the JSON evidence before the runtime expires.
+
+Agent requests explicitly disable optional thinking so the bounded generation budget is available for the structured answer. This improves transport/JSON reliability, not factual or planning accuracy. Measured results and limitations are in [the November validation record](docs/VALIDATION_2026-11-09.md).
+
+The frontend has a DOM integration smoke test against a real Python server. It checks application behavior but does not render pixels or replace visual browser QA:
+
+```bash
+python -m pip install .
+npm install --no-audit --no-fund --prefix /tmp/lab-ui jsdom@31.0.0
+NODE_PATH=/tmp/lab-ui/node_modules node tests/ui_smoke.cjs
+```
+
+Use Node 24. The `DOM integration` GitHub Actions workflow runs this test independently of the Python suite.
+
 ## Quick start
 
 ```bash
@@ -46,10 +62,10 @@ The lab sends two checkout intents (quantities 2 and 1) against an initial stock
 | Mode | Behavior | Requires Ollama |
 | --- | --- | --- |
 | `runbook` | Executes the authored reference plan | No |
-| `single` | One model call investigates and chooses a recovery plan | Yes |
-| `multi` | Commander → observer → investigator → recovery engineer → verifier | Yes |
+| `single` | One generalist selects plans using measured feedback, up to 3 recovery rounds | Yes |
+| `multi` | Commander → observer → investigator → bounded recovery rounds → verifier | Yes |
 
-Specialists share evidence and previous findings, using the same configured model sequentially. The recovery agent selects real bounded actions; these are executed against the toy services and independently checked. The verifier agent narrates the measured outcome but cannot change it. There is **no silent runbook fallback** if inference fails.
+Specialists share evidence and previous findings, using the same configured model sequentially. The recovery agent selects real bounded actions; these are executed against the toy services and independently checked. Each unsuccessful round returns actual verification checks, action results and current service evidence to the planner. Observed operation failures are also projected into a short, deduplicated list before the raw snapshots, so a dependency error is not confused with its downstream pending orders. Planning responses must cite evidence and supply one to five executable actions; these requirements are checked both in the decoding schema and at runtime. Analysis findings omit their always-empty action lists from the shared hearing, preventing them from being confused with a recovery plan. Recovery stops when verified healthy, an inference failure occurs, or the three-round budget is exhausted. Each plan permits at most five actions. The verifier agent narrates the measured outcome but cannot change it. Use `benchmark --max-rounds 1` for the earlier one-shot budget; single and multi modes have different total model-call budgets. Concurrent incidents serialize calls through the shared Ollama client to limit GPU pressure. Malformed/invalid structured responses and model-server HTTP 5xx errors receive at most one correction or retry per role call. Both the rejected response attempt and correction are retained; `agent_calls` counts every attempt, `agent_failures` includes rejected attempts, and `response_retries` records corrections. Connection failures are not retried. There is **no silent runbook fallback** if inference fails.
 
 ## Enable local Gemma 4
 
@@ -159,7 +175,7 @@ curl -X POST http://127.0.0.1:8080/api/runs \
   -d '{"scenario":"orphaned-payment","mode":"runbook"}'
 ```
 
-The control queue accepts at most four outstanding runs with two concurrent workers. Use one Uvicorn worker. Distributed SQLite operations are not a cross-service transaction; partial saga progress is intentionally visible and recovery replays by idempotency key.
+The control queue accepts at most four outstanding runs with one incident worker; model requests are also serialized by the shared client. Use one Uvicorn worker. Distributed SQLite operations are not a cross-service transaction; partial saga progress is intentionally visible and recovery replays by idempotency key.
 
 ## Project map
 

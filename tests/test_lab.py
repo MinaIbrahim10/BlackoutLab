@@ -131,6 +131,8 @@ def test_multi_agent_plan_executes_and_verifier_cannot_override_evidence(system)
     assert report['status']=='recovered'
     assert [r for r,c in fake.calls]==['commander','observer','investigator','recovery','verifier']
     assert len(fake.calls[3][1]['hearing'])==3
+    assert all('actions' not in entry for entry in fake.calls[3][1]['hearing'])
+    assert all(entry['evidence']==['capture exists'] for entry in fake.calls[3][1]['hearing'])
     assert 'faults' not in fake.calls[0][1]['state']['orders']
     assert report['metrics']['agent_calls']==5
 
@@ -147,6 +149,81 @@ def test_empty_ai_plan_cannot_self_declare_recovery(system):
     assert not report['after']['verification']['healthy']
 
 
+@pytest.mark.parametrize('mode',['single','multi'])
+def test_measured_feedback_repairs_incomplete_plan_without_reference_fallback(system,mode):
+    store,transport,lab=system
+    class FeedbackAgent:
+        model='test-only'
+        def __init__(self): self.plans=[]
+        def ask(self,role,context):
+            actions=[]
+            if role in ('single','recovery'):
+                self.plans.append(context)
+                actions=['restore-orders'] if len(self.plans)==1 else ['replay-checkouts']
+            return {'summary':'Measured feedback response','actions':actions}
+    agent=FeedbackAgent();lab.agents=agent
+    run=store.create_run('orphaned-payment',mode)
+    report=lab.run(run,'orphaned-payment',mode)
+    assert report['status']=='recovered'
+    assert len(agent.plans)==2
+    feedback=agent.plans[1]
+    assert feedback['remaining_rounds']==2
+    assert not feedback['verification']['healthy']
+    assert feedback['state']['orders']['orders']==[]
+    assert all('faults' not in service for service in feedback['state'].values())
+    assert 'scenario' not in feedback and 'runbook' not in feedback
+    assert feedback['previous_attempts'][0]['plan']==['restore-orders']
+    assert [r['plan'] for r in report['recovery_rounds']]==[['restore-orders'],['replay-checkouts']]
+    assert report['metrics']['recovery_rounds']==2
+    assert report['after']['verification']['payments']==2
+    assert report['after']['verification']['stock']==17
+    assert [a['action'] for a in report['actions']]==['restore-orders','replay-checkouts']
+
+
+def test_repeated_wrong_plans_stop_at_budget_without_fallback(system):
+    store,transport,lab=system
+    class WrongAgent:
+        model='test-only'
+        def __init__(self):self.calls=0
+        def ask(self,role,context):
+            self.calls+=1
+            return {'summary':'Incorrect plan','actions':[]}
+    agent=WrongAgent();lab.agents=agent
+    run=store.create_run('orphaned-payment','single')
+    report=lab.run(run,'orphaned-payment','single')
+    assert report['status']=='unresolved'
+    assert agent.calls==3
+    assert report['metrics']['recovery_rounds']==3
+    assert report['actions']==[]
+    assert not any(event['kind']=='runbook.selected' for event in store.events(run))
+
+
+def test_feedback_inference_failure_preserves_measured_state_and_stops(system):
+    store,transport,lab=system
+    class FailsOnRetry:
+        model='test-only'
+        def __init__(self):self.calls=0
+        def ask(self,role,context):
+            self.calls+=1
+            if self.calls>1: raise TimeoutError()
+            return {'summary':'Incomplete plan','actions':['restore-orders']}
+    agent=FailsOnRetry();lab.agents=agent
+    run=store.create_run('orphaned-payment','single')
+    report=lab.run(run,'orphaned-payment','single')
+    assert report['status']=='unresolved'
+    assert agent.calls==2
+    assert report['metrics']['agent_failures']==1
+    assert report['metrics']['recovery_rounds']==1
+    assert report['after']['state']['orders']['faults']['drop-order'] is False
+    assert report['after']['verification']['orders']==0
+
+
+def test_invalid_round_budget_is_rejected(system):
+    store,transport,_=system
+    for budget in [0,4,True,'3']:
+        with pytest.raises(ValueError): Lab(store,transport,max_rounds=budget)
+
+
 def test_agent_schema_rejects_shell_commands():
     with pytest.raises(ValidationError):AgentAnswer(summary='bad',actions=['curl evil'])
     with pytest.raises(ValidationError):AgentAnswer(summary='bad',unexpected='field')
@@ -154,9 +231,10 @@ def test_agent_schema_rejects_shell_commands():
 
 def test_ollama_adapter_checks_response_and_analysis_role_permissions(monkeypatch):
     payloads=[]
+    answer={'summary':'diagnosis','evidence':['orders.checkout failed after capture'],'actions':['restore-orders']}
     class Response:
         def raise_for_status(self):pass
-        def json(self):return {'message':{'content':json.dumps({'summary':'diagnosis','actions':['restore-orders']})}}
+        def json(self):return {'message':{'content':json.dumps(answer)}}
     class Client:
         def __init__(self,**kwargs):pass
         def __enter__(self):return self
@@ -168,6 +246,16 @@ def test_ollama_adapter_checks_response_and_analysis_role_permissions(monkeypatc
     assert agent.ask('recovery',{})['actions']==['restore-orders']
     assert payloads[0]['format']['properties']['actions']['items']['enum']
     assert payloads[0]['stream'] is False
+    assert payloads[0]['think'] is False
+    assert payloads[0]['format']['properties']['actions']['maxItems'] == 0
+    assert payloads[1]['format']['properties']['actions']['maxItems'] == 5
+    assert payloads[1]['format']['properties']['evidence']['minItems'] == 1
+    assert 'evidence' in payloads[1]['format']['required']
+    assert payloads[1]['format']['properties']['actions']['minItems'] == 1
+    answer['evidence']=[]
+    with pytest.raises(ValueError,match='cite observed evidence'):agent.ask('recovery',{})
+    answer['evidence']=['observed failure'];answer['actions']=[]
+    with pytest.raises(ValueError,match='no executable actions'):agent.ask('recovery',{})
 
 
 def test_corrupted_payment_quantity_fails_verifier(system):
@@ -225,3 +313,137 @@ def test_internal_token_and_validation(tmp_path,monkeypatch):
         assert client.post(path,json={},headers={'X-Lab-Token':'test-token-only'}).status_code==422
         assert client.post('/internal/invalid/snapshot',json={},headers={'X-Lab-Token':'test-token-only'}).status_code==422
         assert client.post(path,json={'key':'test','qty':1,'amount':2500},headers={'X-Lab-Token':'test-token-only'}).status_code==200
+
+
+def test_planner_receives_observed_dependency_failure_without_fault_switches(system):
+    store,transport,_=system
+    class RecordingAgent:
+        context=None
+        def ask(self,role,context):
+            self.context=context
+            return {'summary':'No plan','actions':[]}
+    agent=RecordingAgent()
+    lab=Lab(store,transport,agent,max_rounds=1)
+    rid=store.create_run('payments-outage','single')
+    report=lab.run(rid,'payments-outage','single')
+    errors=agent.context['observed_operation_failures']
+    assert any(e['service']=='payments' and e['operation']=='capture' and 'unavailable' in e['error'] for e in errors)
+    assert len(errors)==len({json.dumps(e,sort_keys=True) for e in errors})
+    assert all(set(e)=={'service','operation','error'} for e in errors)
+    assert all('faults' not in service for service in agent.context['state'].values())
+    assert 'scenario' not in agent.context and 'runbook' not in agent.context
+    assert report['status']=='unresolved' and report['actions']==[]
+
+
+def test_invalid_response_gets_one_correction_before_any_action(system):
+    store,transport,lab=system
+    class Corrected:
+        model='test-only'
+        def __init__(self):self.calls=0
+        def ask(self,role,context):
+            self.calls+=1
+            if self.calls==1:raise ValueError('Invalid structured response')
+            assert context['response_validation_feedback']['error_type']=='ValueError'
+            assert not verify(snapshot(transport,rid))['healthy']
+            assert not any(e['kind']=='action.started' for e in store.events(rid))
+            return {'summary':'Validated repair','actions':['restore-payments','replay-checkouts']}
+    agent=Corrected();lab.agents=agent
+    rid=store.create_run('payments-outage','single')
+    report=lab.run(rid,'payments-outage','single')
+    assert report['status']=='recovered' and agent.calls==2
+    assert [c['status'] for c in report['agents']]==['failed','completed']
+    assert report['agents'][0]['will_retry'] is True
+    assert report['metrics']['agent_calls']==2
+    assert report['metrics']['agent_failures']==1
+    assert report['metrics']['response_retries']==1
+    assert report['metrics']['actions_attempted']==2
+    assert not any(e['kind']=='runbook.selected' for e in store.events(rid))
+
+
+def test_invalid_response_correction_budget_stops_without_fallback(system):
+    store,transport,lab=system
+    class Invalid:
+        def ask(self,*args):raise ValueError('Always invalid')
+    lab.agents=Invalid()
+    rid=store.create_run('payments-outage','single')
+    report=lab.run(rid,'payments-outage','single')
+    assert report['status']=='unresolved' and report['actions']==[]
+    assert report['metrics']['agent_calls']==2
+    assert report['metrics']['agent_failures']==2
+    assert report['metrics']['response_retries']==1
+    assert report['agents'][-1]['will_retry'] is False
+
+
+@pytest.mark.parametrize('status,expected_requests',[(503,2),(400,1)])
+def test_only_transient_server_errors_receive_bounded_retry(system,status,expected_requests):
+    store,transport,lab=system
+    class ServerFailure:
+        calls=0
+        def ask(self,role,context):
+            self.calls+=1
+            if self.calls==1:
+                response=httpx.Response(status,request=httpx.Request('POST','http://127.0.0.1:11434/api/chat'))
+                response.raise_for_status()
+            assert context['model_server_retry_feedback']['http_status']==503
+            return {'summary':'Repair','actions':['restore-payments','replay-checkouts']}
+    agent=ServerFailure();lab.agents=agent
+    rid=store.create_run('payments-outage','single')
+    report=lab.run(rid,'payments-outage','single')
+    assert agent.calls==expected_requests
+    assert report['agents'][0]['http_status']==status
+    assert report['status']==('recovered' if status==503 else 'unresolved')
+    assert report['metrics']['agent_failures']==1
+
+
+def test_shared_ollama_client_serializes_concurrent_incidents(monkeypatch):
+    from threading import Lock
+    active=peak=0
+    guard=Lock()
+    class Response:
+        def raise_for_status(self):pass
+        def json(self):return {'message':{'content':json.dumps({'summary':'Repair','evidence':['observed error'],'actions':['restore-payments']})}}
+    class Client:
+        def __init__(self,**kwargs):pass
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def post(self,*args,**kwargs):
+            nonlocal active,peak
+            with guard:
+                active+=1;peak=max(peak,active)
+            time.sleep(.03)
+            with guard:active-=1
+            return Response()
+    monkeypatch.setattr('blackout.agents.httpx.Client',Client)
+    agent=OllamaAgents(model='test-only')
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        answers=list(pool.map(lambda _:agent.ask('single',{}),range(4)))
+    assert len(answers)==4 and peak==1
+
+
+def test_control_queue_serializes_incidents_and_retains_capacity(tmp_path):
+    from threading import Event, Lock
+    started,release=Event(),Event()
+    guard=Lock()
+    class HeldAgent:
+        model='test-only'
+        active=peak=0
+        def ask(self,role,context):
+            with guard:
+                self.active+=1;self.peak=max(self.peak,self.active)
+            started.set()
+            try:
+                assert release.wait(10)
+                return {'summary':'Repair','actions':['restore-orders','replay-checkouts']}
+            finally:
+                with guard:self.active-=1
+    agent=HeldAgent()
+    with TestClient(create_app(tmp_path,agents=agent)) as client:
+        try:
+            first=client.post('/api/runs',json={'scenario':'orphaned-payment','mode':'single'})
+            assert first.status_code==202 and started.wait(3)
+            queued=[client.post('/api/runs',json={'scenario':'orphaned-payment','mode':'single'}) for _ in range(3)]
+            assert all(r.status_code==202 for r in queued)
+            assert client.post('/api/runs',json={'scenario':'orphaned-payment','mode':'single'}).status_code==429
+            assert agent.peak==1
+        finally:release.set()
+    assert agent.peak==1

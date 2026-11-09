@@ -1,6 +1,7 @@
 """Incident lifecycle, evidence collection, allowlisted recovery and truthful reports."""
 import json
 import time
+import httpx
 from .agents import ACTIONS
 from .services import DomainError, UNIT_PRICE
 from .verify import snapshot, verify
@@ -19,8 +20,11 @@ SCENARIOS = {
 
 
 class Lab:
-    def __init__(self, store, transport, agents=None):
+    def __init__(self, store, transport, agents=None, max_rounds=3):
+        if type(max_rounds) is not int or not 1 <= max_rounds <= 3:
+            raise ValueError('Recovery rounds must be between 1 and 3')
         self.store, self.transport, self.agents = store, transport, agents
+        self.max_rounds = max_rounds
 
     def emit(self, run, kind, data, role='control'):
         self.store.log(run,role,kind,data)
@@ -73,65 +77,116 @@ class Lab:
         calls = []
         failures = []
         actions = []
+        rounds = []
         # Hide the scenario/runbook and injected fault configuration from the agent inputs.
         # Logs still expose authored failure messages: this is an introductory benchmark.
         def evidence(context):
             clean = json.loads(json.dumps(context))
             for s in clean.get('state',{}).values(): s.pop('faults',None)
             clean['events'] = [e for e in clean.get('events',[]) if e['kind'] != 'fault.changed']
-            return clean
+            # Put observed leaf-operation failures before downstream ledger symptoms.
+            # This is a projection of telemetry, not a scenario lookup or repair plan.
+            failed = []
+            for event in reversed(clean['events']):
+                data = event.get('data', {})
+                if data.get('status') != 'error' or not data.get('error'):
+                    continue
+                item = {'service':event['service'], 'operation':data.get('operation'),
+                        'error':data['error']}
+                if item not in failed:
+                    failed.append(item)
+            return {'observed_operation_failures':failed[:12], **clean}
         def ask(role, context):
-            at = time.perf_counter()
-            self.emit(run,'agent.started',{'role':role},role)
-            try:
-                if self.agents is None: raise RuntimeError('Ollama client is not configured')
-                answer = self.agents.ask(role,context)
-                calls.append({'role':role,'status':'completed','duration_ms':round((time.perf_counter()-at)*1000,2),**answer})
-                self.emit(run,'agent.completed',calls[-1],role)
-                return answer
-            except Exception as exc:
-                item = {'role':role,'status':'failed','error':type(exc).__name__,
-                        'summary':'Agent inference failed. See Ollama configuration and server availability.',
-                        'duration_ms':round((time.perf_counter()-at)*1000,2)}
-                calls.append(item);failures.append(item)
-                self.emit(run,'agent.failed',item,role)
-                return None
+            # One correction/retry for invalid output or a transient model-server 5xx.
+            # Every request, including the failed one, remains in the report.
+            for attempt in range(1, 3):
+                at = time.perf_counter()
+                self.emit(run,'agent.started',{'role':role,'attempt':attempt},role)
+                try:
+                    if self.agents is None: raise RuntimeError('Ollama client is not configured')
+                    answer = self.agents.ask(role,context)
+                    calls.append({'role':role,'status':'completed','attempt':attempt,
+                                  'duration_ms':round((time.perf_counter()-at)*1000,2),**answer})
+                    self.emit(run,'agent.completed',calls[-1],role)
+                    return answer
+                except Exception as exc:
+                    server_status = exc.response.status_code if isinstance(exc,httpx.HTTPStatusError) else None
+                    retry = attempt == 1 and (isinstance(exc,(ValueError,KeyError)) or
+                                              (server_status is not None and server_status >= 500))
+                    item = {'role':role,'status':'failed','error':type(exc).__name__,
+                            'attempt':attempt,'will_retry':retry,'http_status':server_status,
+                            'summary':'Model response failed; requesting one bounded correction or retry.' if retry else
+                                      'Agent inference failed. See Ollama configuration and server availability.',
+                            'duration_ms':round((time.perf_counter()-at)*1000,2)}
+                    calls.append(item)
+                    self.emit(run,'agent.failed',item,role)
+                    if not retry:
+                        failures.append(item)
+                        return None
+                    if server_status is not None:
+                        context = {**context,'model_server_retry_feedback':{'http_status':server_status}}
+                    else:
+                        context = {**context, 'response_validation_feedback':{
+                            'error_type':type(exc).__name__,
+                            'required':'A concise schema-valid answer. Recovery planners must cite evidence and select 1–5 executable allowlisted actions.'}}
+            return None
+        hearing = []
         if mode == 'runbook':
             plan = SCENARIOS[scenario]['runbook']
             self.emit(run,'runbook.selected',{'actions':plan,'note':'Deterministic reference baseline; no AI calls.'},'commander')
         else:
             context = evidence(before)
             if mode == 'multi':
-                hearing = []
                 for role in ('commander','observer','investigator'):
                     answer = ask(role,{**context,'hearing':hearing})
                     if answer is None: break
-                    hearing.append({'role':role,**answer})
+                    hearing.append({'role':role, **{key:value for key,value in answer.items() if key != 'actions'}})
                 proposed = None if failures else ask('recovery',{**context,'hearing':hearing})
             else:
                 proposed = ask('single',context)
             plan = proposed.get('actions',[]) if proposed else []
-        self.store.update_run(run,'recovering')
-        for action in plan:
-            try:
-                self.emit(run,'action.started',{'action':action},'recovery')
-                result = self.apply(run,action)
-                actions.append({'action':action,'status':'completed','result':result})
-            except Exception as exc:
-                actions.append({'action':action,'status':'failed','error':str(exc)})
-                self.emit(run,'action.failed',actions[-1],'recovery')
-        self.store.update_run(run,'verifying')
-        after = self.collect(run)
-        self.emit(run,'verification.after',after['verification'],'verifier')
+        budget = 1 if mode == 'runbook' else self.max_rounds
+        for round_number in range(1, budget + 1):
+            self.store.update_run(run,'recovering')
+            self.emit(run,'recovery.round',{'round':round_number,'budget':budget,'actions':plan},'recovery')
+            round_actions = []
+            for action in plan:
+                try:
+                    self.emit(run,'action.started',{'action':action,'round':round_number},'recovery')
+                    result = self.apply(run,action)
+                    item = {'action':action,'status':'completed','result':result}
+                except Exception as exc:
+                    item = {'action':action,'status':'failed','error':str(exc)}
+                    self.emit(run,'action.failed',item,'recovery')
+                actions.append(item)
+                round_actions.append(item)
+            self.store.update_run(run,'verifying')
+            after = self.collect(run)
+            self.emit(run,'verification.after',after['verification'],'verifier')
+            rounds.append({'round':round_number,'plan':list(plan),'actions':round_actions,
+                           'verification':after['verification']})
+            if after['verification']['healthy'] or failures or round_number == budget:
+                break
+            # The model receives measured feedback, never the scenario's reference plan.
+            feedback = evidence({**after,'previous_attempts':rounds,
+                                 'remaining_rounds':budget-round_number})
+            if mode == 'multi': feedback['hearing'] = hearing
+            self.store.update_run(run,'investigating')
+            proposed = ask('recovery' if mode == 'multi' else 'single',feedback)
+            if proposed is None:
+                break
+            plan = proposed.get('actions',[])
         if mode == 'multi' and not failures:
             ask('verifier',{'verification':after['verification'],'actions':actions})
         healthy = after['verification']['healthy']
         status = 'recovered' if healthy else 'unresolved'
         report = {'run_id':run,'scenario':scenario,'mode':mode,'status':status,
                   'model':getattr(self.agents,'model',None) if mode!='runbook' else None,
-                  'before':before,'after':after,'agents':calls,'actions':actions,
+                  'before':before,'after':after,'agents':calls,'actions':actions,'recovery_rounds':rounds,
                   'metrics':{'duration_ms':round((time.perf_counter()-started)*1000,2),
-                             'agent_calls':len(calls),'agent_failures':len(failures),
+                             'agent_calls':len(calls),'agent_failures':sum(c['status']=='failed' for c in calls),
+                             'response_retries':sum(c.get('attempt',1)>1 for c in calls),
+                             'recovery_rounds':len(rounds),'max_recovery_rounds':budget,
                              'actions_attempted':len(actions),'actions_failed':sum(a['status']=='failed' for a in actions),
                              'checks_passed':sum(c['passed'] for c in after['verification']['checks']),
                              'checks_total':len(after['verification']['checks'])},

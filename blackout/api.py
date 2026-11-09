@@ -42,7 +42,7 @@ def create_app(data_dir=None, role=None, agents=None, transport=None):
     store = Store(root / f'{role}.sqlite')
     transport = transport or (LocalTransport(root) if role=='all' else HTTPTransport() if role in ('control','orders') else None)
     service = None if control else Service(role,store,transport)
-    executor = ThreadPoolExecutor(max_workers=2,thread_name_prefix='blackout') if control else None
+    executor = ThreadPoolExecutor(max_workers=1,thread_name_prefix='blackout') if control else None
     slots = BoundedSemaphore(4)
     lab = Lab(store,transport,agents or OllamaAgents()) if control else None
 
@@ -109,6 +109,7 @@ def create_app(data_dir=None, role=None, agents=None, transport=None):
     @app.get('/api/config')
     def config():
         return {'default_mode':'runbook','model':lab.agents.model,'deployment':'distributed-http' if role=='control' else 'single-process',
+                'max_recovery_rounds':lab.max_rounds,
                 'scope':'Toy services only. No real payments or production infrastructure.'}
 
     @app.get('/api/runs')
