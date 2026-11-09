@@ -1,0 +1,815 @@
+{
+  "run_id": "631f8ebcf9f940ab8aeee755e6937036",
+  "scenario": "orphaned-payment",
+  "mode": "single",
+  "status": "recovered",
+  "model": "gemma4:e4b",
+  "before": {
+    "state": {
+      "orders": {
+        "intents": [
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-001",
+            "qty": 2,
+            "amount": 5000
+          },
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-002",
+            "qty": 1,
+            "amount": 2500
+          }
+        ],
+        "orders": [],
+        "faults": {
+          "drop-order": true
+        }
+      },
+      "payments": {
+        "payments": [
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-001",
+            "amount": 5000,
+            "qty": 2,
+            "created": 1794233802.615462
+          },
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-002",
+            "amount": 2500,
+            "qty": 1,
+            "created": 1794233802.6581779
+          }
+        ],
+        "faults": {
+          "payments-down": false
+        }
+      },
+      "inventory": {
+        "inventory": [
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "stock": 20
+          }
+        ],
+        "reservations": [],
+        "faults": {
+          "duplicate-reservation": false
+        }
+      }
+    },
+    "verification": {
+      "healthy": false,
+      "checks": [
+        {
+          "name": "all_intents_committed",
+          "passed": false,
+          "details": {
+            "pending": [
+              "checkout-001",
+              "checkout-002"
+            ]
+          }
+        },
+        {
+          "name": "payments_match_orders",
+          "passed": false,
+          "details": {
+            "orphaned_payments": [
+              "checkout-001",
+              "checkout-002"
+            ],
+            "unpaid_orders": []
+          }
+        },
+        {
+          "name": "one_reservation_per_order",
+          "passed": true,
+          "details": {
+            "reservations_per_key": {},
+            "quantity_per_key": {}
+          }
+        },
+        {
+          "name": "stock_matches_committed_orders",
+          "passed": true,
+          "details": {
+            "actual": 20,
+            "expected": 20
+          }
+        },
+        {
+          "name": "stock_ledger_conserved",
+          "passed": true,
+          "details": {
+            "stock": 20,
+            "reserved": 0
+          }
+        },
+        {
+          "name": "faults_disabled",
+          "passed": false,
+          "details": {}
+        }
+      ],
+      "orders": 0,
+      "payments": 2,
+      "stock": 20
+    },
+    "events": [
+      {
+        "seq": 1,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.5855849,
+        "service": "control",
+        "kind": "fault.changed",
+        "trace": "",
+        "data": {
+          "fault": "drop-order",
+          "enabled": true
+        }
+      },
+      {
+        "seq": 2,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.592652,
+        "service": "orders",
+        "kind": "span",
+        "trace": "9a611874c6bc4e31bf0adb9cc69c7bda",
+        "data": {
+          "operation": "fault",
+          "status": "ok",
+          "duration_ms": 13.659,
+          "otel_trace_id": "f04b282d3349693acc41bd16f1108344"
+        }
+      },
+      {
+        "seq": 1,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.621964,
+        "service": "payments",
+        "kind": "payment.captured",
+        "trace": "",
+        "data": {
+          "key": "checkout-001",
+          "amount": 5000
+        }
+      },
+      {
+        "seq": 2,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.62813,
+        "service": "payments",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "capture",
+          "status": "ok",
+          "duration_ms": 13.272,
+          "otel_trace_id": "80eba26fc64d58ee3c1a0daced7a4430"
+        }
+      },
+      {
+        "seq": 3,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.6359534,
+        "service": "orders",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "checkout",
+          "status": "error",
+          "error": "Order writer failed after payment capture (injected fault)",
+          "duration_ms": 28.612,
+          "otel_trace_id": "80eba26fc64d58ee3c1a0daced7a4430"
+        }
+      },
+      {
+        "seq": 3,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.6652062,
+        "service": "payments",
+        "kind": "payment.captured",
+        "trace": "",
+        "data": {
+          "key": "checkout-002",
+          "amount": 2500
+        }
+      },
+      {
+        "seq": 4,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.6722598,
+        "service": "payments",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "capture",
+          "status": "ok",
+          "duration_ms": 14.557,
+          "otel_trace_id": "5b90c2051a7b73e5c70c2122f12027ba"
+        }
+      },
+      {
+        "seq": 4,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.6810827,
+        "service": "orders",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "checkout",
+          "status": "error",
+          "error": "Order writer failed after payment capture (injected fault)",
+          "duration_ms": 30.402,
+          "otel_trace_id": "5b90c2051a7b73e5c70c2122f12027ba"
+        }
+      }
+    ]
+  },
+  "after": {
+    "state": {
+      "orders": {
+        "intents": [
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-001",
+            "qty": 2,
+            "amount": 5000
+          },
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-002",
+            "qty": 1,
+            "amount": 2500
+          }
+        ],
+        "orders": [
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-001",
+            "qty": 2,
+            "amount": 5000,
+            "created": 1794233839.6006277
+          },
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-002",
+            "qty": 1,
+            "amount": 2500,
+            "created": 1794233839.643479
+          }
+        ],
+        "faults": {
+          "drop-order": false
+        }
+      },
+      "payments": {
+        "payments": [
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-001",
+            "amount": 5000,
+            "qty": 2,
+            "created": 1794233802.615462
+          },
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-002",
+            "amount": 2500,
+            "qty": 1,
+            "created": 1794233802.6581779
+          }
+        ],
+        "faults": {
+          "payments-down": false
+        }
+      },
+      "inventory": {
+        "inventory": [
+          {
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "stock": 17
+          }
+        ],
+        "reservations": [
+          {
+            "id": "3bb4804141f043e0a6ef387c8bd9fb31",
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-001",
+            "qty": 2
+          },
+          {
+            "id": "cb80a0b4fe954ab7aa37879309fe40ed",
+            "run": "631f8ebcf9f940ab8aeee755e6937036",
+            "key": "checkout-002",
+            "qty": 1
+          }
+        ],
+        "faults": {
+          "duplicate-reservation": false
+        }
+      }
+    },
+    "verification": {
+      "healthy": true,
+      "checks": [
+        {
+          "name": "all_intents_committed",
+          "passed": true,
+          "details": {
+            "pending": []
+          }
+        },
+        {
+          "name": "payments_match_orders",
+          "passed": true,
+          "details": {
+            "orphaned_payments": [],
+            "unpaid_orders": []
+          }
+        },
+        {
+          "name": "one_reservation_per_order",
+          "passed": true,
+          "details": {
+            "reservations_per_key": {
+              "checkout-001": 1,
+              "checkout-002": 1
+            },
+            "quantity_per_key": {
+              "checkout-001": 2,
+              "checkout-002": 1
+            }
+          }
+        },
+        {
+          "name": "stock_matches_committed_orders",
+          "passed": true,
+          "details": {
+            "actual": 17,
+            "expected": 17
+          }
+        },
+        {
+          "name": "stock_ledger_conserved",
+          "passed": true,
+          "details": {
+            "stock": 17,
+            "reserved": 3
+          }
+        },
+        {
+          "name": "faults_disabled",
+          "passed": true,
+          "details": {}
+        }
+      ],
+      "orders": 2,
+      "payments": 2,
+      "stock": 17
+    },
+    "events": [
+      {
+        "seq": 1,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.5855849,
+        "service": "control",
+        "kind": "fault.changed",
+        "trace": "",
+        "data": {
+          "fault": "drop-order",
+          "enabled": true
+        }
+      },
+      {
+        "seq": 2,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.592652,
+        "service": "orders",
+        "kind": "span",
+        "trace": "9a611874c6bc4e31bf0adb9cc69c7bda",
+        "data": {
+          "operation": "fault",
+          "status": "ok",
+          "duration_ms": 13.659,
+          "otel_trace_id": "f04b282d3349693acc41bd16f1108344"
+        }
+      },
+      {
+        "seq": 1,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.621964,
+        "service": "payments",
+        "kind": "payment.captured",
+        "trace": "",
+        "data": {
+          "key": "checkout-001",
+          "amount": 5000
+        }
+      },
+      {
+        "seq": 2,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.62813,
+        "service": "payments",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "capture",
+          "status": "ok",
+          "duration_ms": 13.272,
+          "otel_trace_id": "80eba26fc64d58ee3c1a0daced7a4430"
+        }
+      },
+      {
+        "seq": 3,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.6359534,
+        "service": "orders",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "checkout",
+          "status": "error",
+          "error": "Order writer failed after payment capture (injected fault)",
+          "duration_ms": 28.612,
+          "otel_trace_id": "80eba26fc64d58ee3c1a0daced7a4430"
+        }
+      },
+      {
+        "seq": 3,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.6652062,
+        "service": "payments",
+        "kind": "payment.captured",
+        "trace": "",
+        "data": {
+          "key": "checkout-002",
+          "amount": 2500
+        }
+      },
+      {
+        "seq": 4,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.6722598,
+        "service": "payments",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "capture",
+          "status": "ok",
+          "duration_ms": 14.557,
+          "otel_trace_id": "5b90c2051a7b73e5c70c2122f12027ba"
+        }
+      },
+      {
+        "seq": 4,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233802.6810827,
+        "service": "orders",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "checkout",
+          "status": "error",
+          "error": "Order writer failed after payment capture (injected fault)",
+          "duration_ms": 30.402,
+          "otel_trace_id": "5b90c2051a7b73e5c70c2122f12027ba"
+        }
+      },
+      {
+        "seq": 5,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.5426898,
+        "service": "control",
+        "kind": "fault.changed",
+        "trace": "",
+        "data": {
+          "fault": "drop-order",
+          "enabled": false
+        }
+      },
+      {
+        "seq": 6,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.5497782,
+        "service": "orders",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "fault",
+          "status": "ok",
+          "duration_ms": 13.66,
+          "otel_trace_id": "f430b45e9cc8a55f6a6dcced3bdbb387"
+        }
+      },
+      {
+        "seq": 5,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.5731492,
+        "service": "payments",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "capture",
+          "status": "ok",
+          "duration_ms": 2.616,
+          "otel_trace_id": "3d86f19fd242e801e31150f49bb09089"
+        }
+      },
+      {
+        "seq": 1,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.5876992,
+        "service": "inventory",
+        "kind": "inventory.reserved",
+        "trace": "",
+        "data": {
+          "key": "checkout-001",
+          "qty": 2,
+          "idempotency_bypassed": false
+        }
+      },
+      {
+        "seq": 2,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.594103,
+        "service": "inventory",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "reserve",
+          "status": "ok",
+          "duration_ms": 13.765,
+          "otel_trace_id": "3d86f19fd242e801e31150f49bb09089"
+        }
+      },
+      {
+        "seq": 7,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.6073613,
+        "service": "orders",
+        "kind": "order.committed",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "key": "checkout-001",
+          "qty": 2,
+          "amount": 5000
+        }
+      },
+      {
+        "seq": 6,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.615362,
+        "service": "payments",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "capture",
+          "status": "ok",
+          "duration_ms": 0.978,
+          "otel_trace_id": "3d86f19fd242e801e31150f49bb09089"
+        }
+      },
+      {
+        "seq": 3,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.6300135,
+        "service": "inventory",
+        "kind": "inventory.reserved",
+        "trace": "",
+        "data": {
+          "key": "checkout-002",
+          "qty": 1,
+          "idempotency_bypassed": false
+        }
+      },
+      {
+        "seq": 4,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.636956,
+        "service": "inventory",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "reserve",
+          "status": "ok",
+          "duration_ms": 14.226,
+          "otel_trace_id": "3d86f19fd242e801e31150f49bb09089"
+        }
+      },
+      {
+        "seq": 8,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.6502042,
+        "service": "orders",
+        "kind": "order.committed",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "key": "checkout-002",
+          "qty": 1,
+          "amount": 2500
+        }
+      },
+      {
+        "seq": 9,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.656841,
+        "service": "orders",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "retry-pending",
+          "status": "ok",
+          "duration_ms": 87.4,
+          "otel_trace_id": "3d86f19fd242e801e31150f49bb09089"
+        }
+      },
+      {
+        "seq": 7,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.6826222,
+        "service": "control",
+        "kind": "fault.changed",
+        "trace": "",
+        "data": {
+          "fault": "payments-down",
+          "enabled": false
+        }
+      },
+      {
+        "seq": 8,
+        "run": "631f8ebcf9f940ab8aeee755e6937036",
+        "at": 1794233839.689134,
+        "service": "payments",
+        "kind": "span",
+        "trace": "631f8ebcf9f940ab8aeee755e6937036",
+        "data": {
+          "operation": "fault",
+          "status": "ok",
+          "duration_ms": 13.129,
+          "otel_trace_id": "85c1b440e263bc02918e4a949f1792be"
+        }
+      }
+    ]
+  },
+  "agents": [
+    {
+      "role": "single",
+      "status": "completed",
+      "duration_ms": 36789.72,
+      "summary": "The system is in an inconsistent state due to an injected fault in the order writer, leading to pending intents, orphaned payments, and failed commitment checks. The fault must be disabled first. Then, since durable intents lack committed orders, we must restore the failed boundary (orders) before replaying checkouts. Finally, we must restore payments to ensure consistency.",
+      "hypothesis": "",
+      "evidence": [],
+      "actions": [
+        "restore-orders",
+        "replay-checkouts",
+        "restore-payments"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "action": "restore-orders",
+      "status": "completed",
+      "result": {
+        "fault": "drop-order",
+        "enabled": false
+      }
+    },
+    {
+      "action": "replay-checkouts",
+      "status": "completed",
+      "result": {
+        "replayed": [
+          "checkout-001",
+          "checkout-002"
+        ]
+      }
+    },
+    {
+      "action": "restore-payments",
+      "status": "completed",
+      "result": {
+        "fault": "payments-down",
+        "enabled": false
+      }
+    }
+  ],
+  "recovery_rounds": [
+    {
+      "round": 1,
+      "plan": [
+        "restore-orders",
+        "replay-checkouts",
+        "restore-payments"
+      ],
+      "actions": [
+        {
+          "action": "restore-orders",
+          "status": "completed",
+          "result": {
+            "fault": "drop-order",
+            "enabled": false
+          }
+        },
+        {
+          "action": "replay-checkouts",
+          "status": "completed",
+          "result": {
+            "replayed": [
+              "checkout-001",
+              "checkout-002"
+            ]
+          }
+        },
+        {
+          "action": "restore-payments",
+          "status": "completed",
+          "result": {
+            "fault": "payments-down",
+            "enabled": false
+          }
+        }
+      ],
+      "verification": {
+        "healthy": true,
+        "checks": [
+          {
+            "name": "all_intents_committed",
+            "passed": true,
+            "details": {
+              "pending": []
+            }
+          },
+          {
+            "name": "payments_match_orders",
+            "passed": true,
+            "details": {
+              "orphaned_payments": [],
+              "unpaid_orders": []
+            }
+          },
+          {
+            "name": "one_reservation_per_order",
+            "passed": true,
+            "details": {
+              "reservations_per_key": {
+                "checkout-001": 1,
+                "checkout-002": 1
+              },
+              "quantity_per_key": {
+                "checkout-001": 2,
+                "checkout-002": 1
+              }
+            }
+          },
+          {
+            "name": "stock_matches_committed_orders",
+            "passed": true,
+            "details": {
+              "actual": 17,
+              "expected": 17
+            }
+          },
+          {
+            "name": "stock_ledger_conserved",
+            "passed": true,
+            "details": {
+              "stock": 17,
+              "reserved": 3
+            }
+          },
+          {
+            "name": "faults_disabled",
+            "passed": true,
+            "details": {}
+          }
+        ],
+        "orders": 2,
+        "payments": 2,
+        "stock": 17
+      }
+    }
+  ],
+  "metrics": {
+    "duration_ms": 37163.94,
+    "agent_calls": 1,
+    "agent_failures": 0,
+    "recovery_rounds": 1,
+    "max_recovery_rounds": 3,
+    "actions_attempted": 3,
+    "actions_failed": 0,
+    "checks_passed": 6,
+    "checks_total": 6
+  },
+  "limitations": [
+    "Only authored toy-service faults are supported. No production recovery claim.",
+    "Fault labels are hidden from agent snapshots, but authored error messages can reveal the failure boundary.",
+    "Recovery is based on accounting checks, never model self-reported confidence."
+  ],
+  "finished_at": 1794233839.719877
+}

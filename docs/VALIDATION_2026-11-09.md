@@ -59,3 +59,19 @@ The in-notebook transport loaded the real BlackoutLab dashboard with `Lab connec
 ThreadCourt was rendered using the packaged viewer and the saved actual Gemma reports. Lost-update and lock-inversion both displayed the measured model outcomes; lock-inversion trace playback reached step 2 with row highlighting, and its evidence download produced the matching report. These checks cover the desktop Colab view; they do not establish mobile responsiveness or production safety.
 
 The 47-test suite also passed on a fresh Colab T4 runtime, and both updated GitHub Actions suites passed. Both wheel packages built with the required viewer/module assets.
+
+### Closed-loop live Ollama result
+
+Fresh Colab T4 runtime, official Ollama 0.40.15, `gemma4:e4b` digest prefix `dc35e8d9c606`, temperature 0, thinking disabled, maximum three recovery rounds. All three scenarios were measured, three trials per AI mode, with no runbook fallback or discarded failures.
+
+| Strategy | Recovered | Notes |
+| --- | --- | --- |
+| Runbook reference | 3/3 | One trial per scenario; no model calls |
+| Single generalist | 6/9 | All three payment-outage trials remained unresolved after three rounds |
+| Multi-role team | 9/9 | Two payment-outage trials required a second measured recovery round |
+
+The multi-role team used five or six calls per run; the generalist used one or three. These are unequal inference costs, not a controlled equal-compute comparison. Nine successes do not guarantee future recovery. Model output cannot override the actual verifier. The three unresolved generalist reports are retained alongside successful runs.
+
+A separate post-benchmark multi-agent payment-outage run launched through the real Colab UI was **unresolved (5/6 checks, three recovery rounds, seven calls)**. Thus the extra UI run must not be folded into a claim of universal 100% recovery; the combined multi-role observation is 9/10. The interface correctly surfaced the failure. Median benchmark latency was 5.42s for single and 17.79s for multi, excluding model warmup. A live UI metrics issue was also corrected: running experiments now count their own events instead of retaining previous-run action/call totals.
+
+Full follow-up reports, including all failures, metadata and the experiment script, are retained in [BlackoutLab closed-loop evidence](https://github.com/MinaIbrahim10/BlackoutLab/tree/fix/ollama-colab-validation/docs/evidence/2026-11-09/closed-loop).
