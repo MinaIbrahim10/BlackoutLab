@@ -83,7 +83,18 @@ class Lab:
             clean = json.loads(json.dumps(context))
             for s in clean.get('state',{}).values(): s.pop('faults',None)
             clean['events'] = [e for e in clean.get('events',[]) if e['kind'] != 'fault.changed']
-            return clean
+            # Put observed leaf-operation failures before downstream ledger symptoms.
+            # This is a projection of telemetry, not a scenario lookup or repair plan.
+            failed = []
+            for event in reversed(clean['events']):
+                data = event.get('data', {})
+                if data.get('status') != 'error' or not data.get('error'):
+                    continue
+                item = {'service':event['service'], 'operation':data.get('operation'),
+                        'error':data['error']}
+                if item not in failed:
+                    failed.append(item)
+            return {'observed_operation_failures':failed[:12], **clean}
         def ask(role, context):
             at = time.perf_counter()
             self.emit(run,'agent.started',{'role':role},role)

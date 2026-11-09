@@ -303,3 +303,23 @@ def test_internal_token_and_validation(tmp_path,monkeypatch):
         assert client.post(path,json={},headers={'X-Lab-Token':'test-token-only'}).status_code==422
         assert client.post('/internal/invalid/snapshot',json={},headers={'X-Lab-Token':'test-token-only'}).status_code==422
         assert client.post(path,json={'key':'test','qty':1,'amount':2500},headers={'X-Lab-Token':'test-token-only'}).status_code==200
+
+
+def test_planner_receives_observed_dependency_failure_without_fault_switches(system):
+    store,transport,_=system
+    class RecordingAgent:
+        context=None
+        def ask(self,role,context):
+            self.context=context
+            return {'summary':'No plan','actions':[]}
+    agent=RecordingAgent()
+    lab=Lab(store,transport,agent,max_rounds=1)
+    rid=store.create_run('payments-outage','single')
+    report=lab.run(rid,'payments-outage','single')
+    errors=agent.context['observed_operation_failures']
+    assert any(e['service']=='payments' and e['operation']=='capture' and 'unavailable' in e['error'] for e in errors)
+    assert len(errors)==len({json.dumps(e,sort_keys=True) for e in errors})
+    assert all(set(e)=={'service','operation','error'} for e in errors)
+    assert all('faults' not in service for service in agent.context['state'].values())
+    assert 'scenario' not in agent.context and 'runbook' not in agent.context
+    assert report['status']=='unresolved' and report['actions']==[]
