@@ -249,8 +249,11 @@ def test_ollama_adapter_checks_response_and_analysis_role_permissions(monkeypatc
     assert payloads[1]['format']['properties']['actions']['maxItems'] == 5
     assert payloads[1]['format']['properties']['evidence']['minItems'] == 1
     assert 'evidence' in payloads[1]['format']['required']
+    assert payloads[1]['format']['properties']['actions']['minItems'] == 1
     answer['evidence']=[]
     with pytest.raises(ValueError,match='cite observed evidence'):agent.ask('recovery',{})
+    answer['evidence']=['observed failure'];answer['actions']=[]
+    with pytest.raises(ValueError,match='no executable actions'):agent.ask('recovery',{})
 
 
 def test_corrupted_payment_quantity_fails_verifier(system):

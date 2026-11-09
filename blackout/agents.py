@@ -24,6 +24,8 @@ PLAN_RULES = (
     'When pending intents remain, include replay-checkouts AFTER restoring the failed boundary '
     'in the SAME plan. Do not spend an extra round only to request the replay. '
     'Cite the concrete failing service and operation in evidence. Do not add unrelated restore actions.'
+    ' The actions array is the ONLY executable plan. A summary of intended repairs executes nothing. '
+    'This planning role must supply at least one supported action; earlier analysis roles cannot select actions.'
 )
 
 
@@ -55,6 +57,9 @@ class OllamaAgents:
         if role not in ('recovery', 'single'):
             schema['properties']['actions']['maxItems'] = 0
         else:
+            schema['properties']['actions']['minItems'] = 1
+            schema['properties']['actions'].pop('default', None)
+            schema['properties']['evidence'].pop('default', None)
             schema['properties']['evidence']['minItems'] = 1
             schema.setdefault('required', []).append('evidence')
         system = ('You are an incident-response specialist inside Blackout Lab, a toy commerce laboratory. '
@@ -71,6 +76,8 @@ class OllamaAgents:
             })
             response.raise_for_status()
             answer = AgentAnswer.model_validate_json(response.json()['message']['content'])
+        if role in ('recovery','single') and not answer.actions:
+            raise ValueError('Recovery planner returned no executable actions')
         if role in ('recovery','single') and not answer.evidence:
             raise ValueError('Recovery planner must cite observed evidence')
         if role not in ('recovery','single') and answer.actions:

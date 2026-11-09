@@ -121,7 +121,7 @@ class Lab:
                 for role in ('commander','observer','investigator'):
                     answer = ask(role,{**context,'hearing':hearing})
                     if answer is None: break
-                    hearing.append({'role':role,**answer})
+                    hearing.append({'role':role, **{key:value for key,value in answer.items() if key != 'actions'}})
                 proposed = None if failures else ask('recovery',{**context,'hearing':hearing})
             else:
                 proposed = ask('single',context)
