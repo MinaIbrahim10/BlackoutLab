@@ -71,6 +71,8 @@ class OllamaAgents:
             })
             response.raise_for_status()
             answer = AgentAnswer.model_validate_json(response.json()['message']['content'])
+        if role in ('recovery','single') and not answer.evidence:
+            raise ValueError('Recovery planner must cite observed evidence')
         if role not in ('recovery','single') and answer.actions:
             raise ValueError('Analysis role attempted to select actions')
         return answer.model_dump()

@@ -229,9 +229,10 @@ def test_agent_schema_rejects_shell_commands():
 
 def test_ollama_adapter_checks_response_and_analysis_role_permissions(monkeypatch):
     payloads=[]
+    answer={'summary':'diagnosis','evidence':['orders.checkout failed after capture'],'actions':['restore-orders']}
     class Response:
         def raise_for_status(self):pass
-        def json(self):return {'message':{'content':json.dumps({'summary':'diagnosis','actions':['restore-orders']})}}
+        def json(self):return {'message':{'content':json.dumps(answer)}}
     class Client:
         def __init__(self,**kwargs):pass
         def __enter__(self):return self
@@ -246,6 +247,10 @@ def test_ollama_adapter_checks_response_and_analysis_role_permissions(monkeypatc
     assert payloads[0]['think'] is False
     assert payloads[0]['format']['properties']['actions']['maxItems'] == 0
     assert payloads[1]['format']['properties']['actions']['maxItems'] == 5
+    assert payloads[1]['format']['properties']['evidence']['minItems'] == 1
+    assert 'evidence' in payloads[1]['format']['required']
+    answer['evidence']=[]
+    with pytest.raises(ValueError,match='cite observed evidence'):agent.ask('recovery',{})
 
 
 def test_corrupted_payment_quantity_fails_verifier(system):
