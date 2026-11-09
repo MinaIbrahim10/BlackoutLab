@@ -8,7 +8,7 @@ A local-first incident-response laboratory for a tiny commerce system, with repr
 
 ## Google Colab and UI integration tests
 
-[Open the combined Colab notebook](https://colab.research.google.com/github/MinaIbrahim10/BlackoutLab/blob/fix/ollama-colab-validation/notebooks/Colab.ipynb). Select a T4 GPU and run the cells in order. The notebook installs official Ollama, supplies the required `zstd` dependency, warms Gemma before experiments, runs both laboratories, and offers authenticated Colab dashboard links. BlackoutLab uses port 8081 because Colab occupies 8080. Download the JSON evidence before the runtime expires.
+[Open the combined Colab notebook](https://colab.research.google.com/github/MinaIbrahim10/BlackoutLab/blob/fix/ollama-colab-validation/notebooks/Colab.ipynb). Select a T4 GPU and run the cells in order. The notebook installs official Ollama, supplies the required `zstd` dependency, warms Gemma before experiments, runs both laboratories, and renders both real dashboards inside the notebook. BlackoutLab uses port 8081 because Colab occupies 8080. Download the JSON evidence before the runtime expires.
 
 Agent requests explicitly disable optional thinking so the bounded generation budget is available for the structured answer. This improves transport/JSON reliability, not factual or planning accuracy. Measured results and limitations are in [the November validation record](docs/VALIDATION_2026-11-09.md).
 
@@ -62,10 +62,10 @@ The lab sends two checkout intents (quantities 2 and 1) against an initial stock
 | Mode | Behavior | Requires Ollama |
 | --- | --- | --- |
 | `runbook` | Executes the authored reference plan | No |
-| `single` | One model call investigates and chooses a recovery plan | Yes |
-| `multi` | Commander → observer → investigator → recovery engineer → verifier | Yes |
+| `single` | One generalist selects plans using measured feedback, up to 3 recovery rounds | Yes |
+| `multi` | Commander → observer → investigator → bounded recovery rounds → verifier | Yes |
 
-Specialists share evidence and previous findings, using the same configured model sequentially. The recovery agent selects real bounded actions; these are executed against the toy services and independently checked. The verifier agent narrates the measured outcome but cannot change it. There is **no silent runbook fallback** if inference fails.
+Specialists share evidence and previous findings, using the same configured model sequentially. The recovery agent selects real bounded actions; these are executed against the toy services and independently checked. Each unsuccessful round returns actual verification checks, action results and current service evidence to the planner. Recovery stops when verified healthy, an inference failure occurs, or the three-round budget is exhausted. Each plan permits at most five actions. The verifier agent narrates the measured outcome but cannot change it. Use `benchmark --max-rounds 1` for the earlier one-shot budget; single and multi modes have different total model-call budgets. There is **no silent runbook fallback** if inference fails.
 
 ## Enable local Gemma 4
 
