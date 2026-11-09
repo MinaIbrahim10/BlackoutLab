@@ -10,7 +10,7 @@ Live testing exposed an analysis-role permission problem: the commander returned
 
 Requests now set `think: false` to allocate the bounded generation budget to the structured answer. Planning instructions also make explicit that restoring a service does not replay its durable intents, and repairing data does not disable an injected fault. These are descriptions of action semantics, not a hidden runbook fallback. The independently measured verdict is unchanged.
 
-Colab also required `zstd` for the current official Ollama installer, and port 8080 was already occupied. The notebook supplies that dependency, uses port 8081, and allows only the exact generated Colab proxy hostname in addition to loopback hostnames.
+Colab also required `zstd` for the current official Ollama installer, and port 8080 was already occupied. The notebook supplies that dependency, uses port 8081, and allows only the exact generated Colab proxy hostname in addition to loopback hostnames. Package discovery is explicit so adding `notebooks/` does not make setuptools reject the distribution as multiple top-level packages.
 
 ## Measured recovery: do not select only the successful run
 
@@ -42,6 +42,6 @@ In final CLI runs, all 18 model calls completed with valid responses (three sing
 
 Visual browser QA is incomplete. Both servers started and responded to local HTTP requests inside Colab, but the cloud browser could not open the authenticated Colab port-proxy URL. DOM tests do not validate pixels, responsive rendering or real browser downloads. No public tunnel, disabled origin checks or public Ollama endpoint was introduced to work around that restriction.
 
-Docker execution and external OTLP collector delivery were not newly validated in this session. The Python distributed transport tests did run; consult the existing Compose workflow for Docker results. The older October validation record describes its own environment and should not be confused with this live Colab run.
+GitHub's Compose job completed its configuration check, image build, health checks and distributed control API recovery exercise. External OTLP collector delivery was not newly validated. The older October validation record describes its own environment and should not be confused with this live Colab run.
 
 Raw original, JSON-fix and final reports accompany this record under `docs/evidence/2026-11-09/`. Reports contain fake laboratory transactions and model-generated text. They do not establish production safety or factual accuracy of every explanation.
