@@ -96,21 +96,34 @@ class Lab:
                     failed.append(item)
             return {'observed_operation_failures':failed[:12], **clean}
         def ask(role, context):
-            at = time.perf_counter()
-            self.emit(run,'agent.started',{'role':role},role)
-            try:
-                if self.agents is None: raise RuntimeError('Ollama client is not configured')
-                answer = self.agents.ask(role,context)
-                calls.append({'role':role,'status':'completed','duration_ms':round((time.perf_counter()-at)*1000,2),**answer})
-                self.emit(run,'agent.completed',calls[-1],role)
-                return answer
-            except Exception as exc:
-                item = {'role':role,'status':'failed','error':type(exc).__name__,
-                        'summary':'Agent inference failed. See Ollama configuration and server availability.',
-                        'duration_ms':round((time.perf_counter()-at)*1000,2)}
-                calls.append(item);failures.append(item)
-                self.emit(run,'agent.failed',item,role)
-                return None
+            # One correction attempt for malformed/invalid structured output only.
+            # Every request, including the failed one, remains in the report.
+            for attempt in range(1, 3):
+                at = time.perf_counter()
+                self.emit(run,'agent.started',{'role':role,'attempt':attempt},role)
+                try:
+                    if self.agents is None: raise RuntimeError('Ollama client is not configured')
+                    answer = self.agents.ask(role,context)
+                    calls.append({'role':role,'status':'completed','attempt':attempt,
+                                  'duration_ms':round((time.perf_counter()-at)*1000,2),**answer})
+                    self.emit(run,'agent.completed',calls[-1],role)
+                    return answer
+                except Exception as exc:
+                    retry = attempt == 1 and isinstance(exc, (ValueError, KeyError))
+                    item = {'role':role,'status':'failed','error':type(exc).__name__,
+                            'attempt':attempt,'will_retry':retry,
+                            'summary':'Structured response rejected; requesting one correction.' if retry else
+                                      'Agent inference failed. See Ollama configuration and server availability.',
+                            'duration_ms':round((time.perf_counter()-at)*1000,2)}
+                    calls.append(item)
+                    self.emit(run,'agent.failed',item,role)
+                    if not retry:
+                        failures.append(item)
+                        return None
+                    context = {**context, 'response_validation_feedback':{
+                        'error_type':type(exc).__name__,
+                        'required':'A concise schema-valid answer. Recovery planners must cite evidence and select 1–5 executable allowlisted actions.'}}
+            return None
         hearing = []
         if mode == 'runbook':
             plan = SCENARIOS[scenario]['runbook']
@@ -165,7 +178,8 @@ class Lab:
                   'model':getattr(self.agents,'model',None) if mode!='runbook' else None,
                   'before':before,'after':after,'agents':calls,'actions':actions,'recovery_rounds':rounds,
                   'metrics':{'duration_ms':round((time.perf_counter()-started)*1000,2),
-                             'agent_calls':len(calls),'agent_failures':len(failures),
+                             'agent_calls':len(calls),'agent_failures':sum(c['status']=='failed' for c in calls),
+                             'response_retries':sum(c.get('attempt',1)>1 for c in calls),
                              'recovery_rounds':len(rounds),'max_recovery_rounds':budget,
                              'actions_attempted':len(actions),'actions_failed':sum(a['status']=='failed' for a in actions),
                              'checks_passed':sum(c['passed'] for c in after['verification']['checks']),

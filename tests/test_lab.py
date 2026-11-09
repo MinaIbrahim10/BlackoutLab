@@ -131,6 +131,8 @@ def test_multi_agent_plan_executes_and_verifier_cannot_override_evidence(system)
     assert report['status']=='recovered'
     assert [r for r,c in fake.calls]==['commander','observer','investigator','recovery','verifier']
     assert len(fake.calls[3][1]['hearing'])==3
+    assert all('actions' not in entry for entry in fake.calls[3][1]['hearing'])
+    assert all(entry['evidence']==['capture exists'] for entry in fake.calls[3][1]['hearing'])
     assert 'faults' not in fake.calls[0][1]['state']['orders']
     assert report['metrics']['agent_calls']==5
 
@@ -331,3 +333,42 @@ def test_planner_receives_observed_dependency_failure_without_fault_switches(sys
     assert all('faults' not in service for service in agent.context['state'].values())
     assert 'scenario' not in agent.context and 'runbook' not in agent.context
     assert report['status']=='unresolved' and report['actions']==[]
+
+
+def test_invalid_response_gets_one_correction_before_any_action(system):
+    store,transport,lab=system
+    class Corrected:
+        model='test-only'
+        def __init__(self):self.calls=0
+        def ask(self,role,context):
+            self.calls+=1
+            if self.calls==1:raise ValueError('Invalid structured response')
+            assert context['response_validation_feedback']['error_type']=='ValueError'
+            assert not verify(snapshot(transport,rid))['healthy']
+            assert not any(e['kind']=='action.started' for e in store.events(rid))
+            return {'summary':'Validated repair','actions':['restore-payments','replay-checkouts']}
+    agent=Corrected();lab.agents=agent
+    rid=store.create_run('payments-outage','single')
+    report=lab.run(rid,'payments-outage','single')
+    assert report['status']=='recovered' and agent.calls==2
+    assert [c['status'] for c in report['agents']]==['failed','completed']
+    assert report['agents'][0]['will_retry'] is True
+    assert report['metrics']['agent_calls']==2
+    assert report['metrics']['agent_failures']==1
+    assert report['metrics']['response_retries']==1
+    assert report['metrics']['actions_attempted']==2
+    assert not any(e['kind']=='runbook.selected' for e in store.events(rid))
+
+
+def test_invalid_response_correction_budget_stops_without_fallback(system):
+    store,transport,lab=system
+    class Invalid:
+        def ask(self,*args):raise ValueError('Always invalid')
+    lab.agents=Invalid()
+    rid=store.create_run('payments-outage','single')
+    report=lab.run(rid,'payments-outage','single')
+    assert report['status']=='unresolved' and report['actions']==[]
+    assert report['metrics']['agent_calls']==2
+    assert report['metrics']['agent_failures']==2
+    assert report['metrics']['response_retries']==1
+    assert report['agents'][-1]['will_retry'] is False
